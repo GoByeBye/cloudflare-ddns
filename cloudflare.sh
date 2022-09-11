@@ -102,10 +102,12 @@ configureDNS() {
     if [[ $strUpdate == *"\"success\":false"* ]]; then
       strStatus="Failed to update $strDomainName."
       strError=$(echo $strUpdate | grep -Po '(?<="message":")[^"]*')
-      strMessage="{\"content\": \"${strStatus} Error: ${strError}\"}"
+      # See comment on line 110 for why this is horrible
+      strMessage="{\"username\": \"${DISCORD_WEBHOOK_USERNAME}\", \"avatar_url\": \"${DISCORD_WEBHOOK_AVATAR_URL}\", \"content\": \"${strStatus} Error: ${strError}\"}"
     else
-      strStatus="Successfully updated $strDomainName."
-      strMessage="{\"content\": \"${strStatus}\"}"
+      strStatus="Successfully updated $strDomainName. New IP: $strPublicIP"
+      # This is unreadable garbage, bnut to explain it, first bit sets the username second is the message content
+      strMessage="{\"username\": \"${DISCORD_WEBHOOK_USERNAME}\", \"avatar_url\": \"${DISCORD_WEBHOOK_AVATAR_URL}\", \"content\": \"${strStatus}\"}"
     fi
     curl -s -X POST -H "Content-Type: application/json" -d "$strMessage" "$DISCORD_WEBHOOK_URL"
   fi
@@ -116,8 +118,14 @@ main() {
   verifyPrerequisites
 
   while IFS= read -r line; do
+    local domain
+    local zoneID
     domain=$(echo "$line" | cut -d' ' -f1)
     zoneID=$(echo "$line" | cut -d' ' -f2)
+
+
+    local domains
+    local zoneIDs
 
     # Add the domain and zoneID to the array
     domains+=("$domain")
@@ -125,11 +133,27 @@ main() {
   done < records.txt
 
 
+  intDomainsToCheck=${#domains[@]}
+
+
+  # Discord webhook configuration
+  if [[ $DISCORD_WEBHOOK_USERNAME == "" ]]; then
+    DISCORD_WEBHOOK_USERNAME="Cloudflare DDNS Updater"
+  fi
+
+  if [[ $DISCORD_WEBHOOK_AVATAR_URL == "" ]]; then
+    # Straight up something I found from googling "cloudflare logo"
+    DISCORD_WEBHOOK_AVATAR_URL="https://i.imgur.com/7FAeSaN.png"
+  fi
+
+  # Loop through all the domains and update them
   for ((i=0; i<${#domains[@]}; i++)); do
     strDomainName=${domains[$i]}
     strZoneID=${zoneIDs[$i]}
     configureDNS
+    intDomainsToCheck=$((intDomainsToCheck-1))
   done
+  echo "Done updating domains"
 }
 
 main
